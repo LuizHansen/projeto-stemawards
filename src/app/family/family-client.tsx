@@ -175,7 +175,9 @@ export default function FamilyClient({ currentUserId }: { currentUserId: string 
         </button>
       </div>
 
-      <h2 className="text-lg font-semibold mb-4">Comparação entre membros</h2>
+      <h2 id="comparacao" className="text-lg font-semibold mb-4 scroll-mt-8">
+        Comparação entre membros
+      </h2>
       <div className="grid gap-2 mb-8">
         {overview.memberStats.map((m, index) => (
           <div

@@ -85,6 +85,14 @@ export default async function DashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {familyOverview && (
+            <Link
+              href="/family#comparacao"
+              className="rounded-full border border-zinc-700 hover:border-zinc-500 text-zinc-200 text-sm font-medium px-4 py-2 transition-colors"
+            >
+              Comparar KPIs
+            </Link>
+          )}
           <Link href="/family" className="text-sm text-zinc-400 hover:text-zinc-200">
             Família
           </Link>
