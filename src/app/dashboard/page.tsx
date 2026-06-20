@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getFamilyOverview } from "@/lib/family";
 import SyncButton from "./sync-button";
 
 export default async function DashboardPage() {
@@ -12,6 +13,8 @@ export default async function DashboardPage() {
     include: { game: true },
     orderBy: { playtimeMinutes: "desc" },
   });
+
+  const familyOverview = await getFamilyOverview(user.id);
 
   const totalGames = userGames.length;
   const totalAchievements = userGames.reduce((sum, g) => sum + g.achievementsTotal, 0);
@@ -77,11 +80,15 @@ export default async function DashboardPage() {
             ))}
           </div>
 
-          <h2 className="text-lg font-semibold mb-4">Biblioteca</h2>
+          <h2 className="text-lg font-semibold mb-4">
+            {familyOverview ? `Biblioteca da família (${familyOverview.games.length})` : "Biblioteca"}
+          </h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-            {userGames.map((ug) => (
-              <GameCard key={ug.id} userGame={ug} />
-            ))}
+            {familyOverview
+              ? familyOverview.games.map((game) => (
+                  <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
+                ))
+              : userGames.map((ug) => <GameCard key={ug.id} userGame={ug} />)}
           </div>
         </>
       )}
@@ -140,6 +147,80 @@ function GameCard({
           {userGame.achievementsUnlocked}/{userGame.achievementsTotal} ({percent.toFixed(0)}%)
         </p>
       </div>
+    </Link>
+  );
+}
+
+function FamilyGameCard({
+  game,
+  currentUserId,
+}: {
+  game: {
+    appId: number;
+    name: string;
+    headerUrl: string | null;
+    owners: {
+      userId: string;
+      username: string;
+      achievementsUnlocked: number;
+      achievementsTotal: number;
+    }[];
+  };
+  currentUserId: string;
+}) {
+  const ownedByMe = game.owners.some((o) => o.userId === currentUserId);
+
+  const content = (
+    <>
+      {game.headerUrl && (
+        <Image
+          src={game.headerUrl}
+          alt={game.name}
+          width={460}
+          height={215}
+          className="w-full h-24 object-cover"
+        />
+      )}
+      <div className="p-3">
+        <p className="text-sm font-medium truncate">{game.name}</p>
+        <div className="flex flex-wrap gap-1 mt-2">
+          {game.owners.map((owner) => {
+            const percent =
+              owner.achievementsTotal > 0
+                ? (owner.achievementsUnlocked / owner.achievementsTotal) * 100
+                : 0;
+            return (
+              <span
+                key={owner.userId}
+                className={`text-xs rounded-full px-2 py-0.5 ${
+                  owner.userId === currentUserId
+                    ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800"
+                    : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                }`}
+              >
+                {owner.username}: {percent.toFixed(0)}%
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+
+  if (!ownedByMe) {
+    return (
+      <div className="rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden opacity-80">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={`/games/${game.appId}`}
+      className="rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden hover:border-zinc-600 transition-colors"
+    >
+      {content}
     </Link>
   );
 }
