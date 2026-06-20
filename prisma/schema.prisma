@@ -8,10 +8,10 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  // Used by `prisma migrate` against pooled providers (Neon, Supabase, etc.)
-  // where DATABASE_URL is a pooled connection unsuitable for migrations.
-  directUrl = env("DIRECT_URL")
+  // POSTGRES_PRISMA_URL/POSTGRES_URL_NON_POOLING match the Vercel <-> Supabase
+  // marketplace integration's auto-injected env vars (pooled vs direct).
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
 model User {
