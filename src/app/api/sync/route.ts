@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { syncUserLibrary } from "@/lib/sync";
 
+// Large libraries (100+ games) take longer than the default function
+// timeout to sync - use the highest duration the Vercel plan allows.
+export const maxDuration = 300;
+
 export async function POST() {
   const session = await getSession();
   if (!session) {

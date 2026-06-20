@@ -29,6 +29,7 @@ export type SteamOwnedGame = {
   playtime_forever: number;
   img_icon_url: string;
   rtime_last_played?: number;
+  has_community_visible_stats?: boolean;
 };
 
 export async function getOwnedGames(steamId: string): Promise<SteamOwnedGame[]> {
