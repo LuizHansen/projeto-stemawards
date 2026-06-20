@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Used by `prisma migrate` against pooled providers (Neon, Supabase, etc.)
+  // where DATABASE_URL is a pooled connection unsuitable for migrations.
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  steamId     String   @unique
+  username    String
+  avatarUrl   String?
+  profileUrl  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  games       UserGame[]
+  favorites   FavoriteGame[]
+  favoriteAchievements FavoriteAchievement[]
+  ownedFamilyGroups FamilyGroup[]
+  familyMemberships FamilyMember[]
+}
+
+model Game {
+  id          String   @id @default(cuid())
+  appId       Int      @unique
+  name        String
+  iconUrl     String?
+  headerUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  achievements Achievement[]
+  userGames    UserGame[]
+  favoritedBy  FavoriteGame[]
+  roadmap      GameRoadmap?
+}
+
+model Achievement {
+  id           String   @id @default(cuid())
+  gameId       String
+  apiName      String
+  displayName  String
+  description  String?
+  iconUrl      String?
+  iconGrayUrl  String?
+  globalPercent Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  game         Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userAchievements UserAchievement[]
+  guide        AchievementGuide?
+  favoritedBy  FavoriteAchievement[]
+
+  @@unique([gameId, apiName])
+}
+
+model UserGame {
+  id              String   @id @default(cuid())
+  userId          String
+  gameId          String
+  playtimeMinutes Int      @default(0)
+  lastPlayedAt    DateTime?
+  achievementsTotal   Int @default(0)
+  achievementsUnlocked Int @default(0)
+  syncedAt        DateTime @default(now())
+
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game            Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userAchievements UserAchievement[]
+
+  @@unique([userId, gameId])
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userGameId    String
+  achievementId String
+  unlocked      Boolean  @default(false)
+  unlockedAt    DateTime?
+
+  userGame      UserGame @relation(fields: [userGameId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userGameId, achievementId])
+}
+
+model AchievementGuide {
+  id            String   @id @default(cuid())
+  achievementId String   @unique
+  summary       String?
+  objective     String?
+  steps         String?
+  strategies    String?
+  knownBugs     String?
+  difficulty    String?
+  estimatedTime String?
+  prerequisites String?
+  sources       String[] @default([])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+}
+
+model GameRoadmap {
+  id        String   @id @default(cuid())
+  gameId    String   @unique
+  stages    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  game      Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+}
+
+model FavoriteGame {
+  id      String @id @default(cuid())
+  userId  String
+  gameId  String
+
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game    Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+}
+
+model FavoriteAchievement {
+  id            String @id @default(cuid())
+  userId        String
+  achievementId String
+
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}
+
+model FamilyGroup {
+  id         String   @id @default(cuid())
+  name       String
+  inviteCode String   @unique
+  ownerId    String
+  createdAt  DateTime @default(now())
+
+  owner      User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members    FamilyMember[]
+}
+
+model FamilyMember {
+  id            String   @id @default(cuid())
+  familyGroupId String
+  userId        String
+  joinedAt      DateTime @default(now())
+
+  familyGroup   FamilyGroup @relation(fields: [familyGroupId], references: [id], onDelete: Cascade)
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([familyGroupId, userId])
+}
