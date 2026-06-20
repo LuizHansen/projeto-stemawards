@@ -5,6 +5,7 @@ import {
   getGameSchema,
   getPlayerAchievements,
   getGlobalAchievementPercentages,
+  getAppHeaderImage,
   type SteamOwnedGame,
 } from "@/lib/steam-api";
 
@@ -29,6 +30,20 @@ async function mapWithConcurrency<T, R>(
 
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
   return results;
+}
+
+/**
+ * Resolves the real header image URL for a game, only calling the (rate
+ * limited) Steam Store API when this game hasn't been synced before -
+ * existing games already have a header URL and re-checking it on every
+ * sync would needlessly burn through the Store API's stricter rate limit.
+ */
+async function resolveHeaderUrl(appId: number): Promise<string> {
+  const existing = await prisma.game.findUnique({ where: { appId }, select: { headerUrl: true } });
+  if (existing?.headerUrl) return existing.headerUrl;
+
+  const realUrl = await getAppHeaderImage(appId);
+  return realUrl ?? `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`;
 }
 
 async function withProgress(onDone: () => Promise<void>, fn: () => Promise<void>, label: string) {
@@ -114,6 +129,8 @@ async function syncAchievements(
 }
 
 async function syncOwnedGame(userId: string, steamId: string, ownedGame: SteamOwnedGame) {
+  const headerUrl = await resolveHeaderUrl(ownedGame.appid);
+
   const game = await prisma.game.upsert({
     where: { appId: ownedGame.appid },
     create: {
@@ -122,9 +139,9 @@ async function syncOwnedGame(userId: string, steamId: string, ownedGame: SteamOw
       iconUrl: ownedGame.img_icon_url
         ? `https://media.steampowered.com/steamcommunity/public/images/apps/${ownedGame.appid}/${ownedGame.img_icon_url}.jpg`
         : null,
-      headerUrl: `https://cdn.akamai.steamstatic.com/steam/apps/${ownedGame.appid}/header.jpg`,
+      headerUrl,
     },
-    update: { name: ownedGame.name },
+    update: { name: ownedGame.name, headerUrl },
   });
 
   const lastPlayedAt = ownedGame.rtime_last_played
@@ -178,14 +195,12 @@ async function probeFamilySharedGame(userId: string, steamId: string, appId: num
   const playerAchievements = await getPlayerAchievements(steamId, appId);
   if (playerAchievements.length === 0) return;
 
+  const headerUrl = await resolveHeaderUrl(appId);
+
   const game = await prisma.game.upsert({
     where: { appId },
-    create: {
-      appId,
-      name: gameName,
-      headerUrl: `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
-    },
-    update: {},
+    create: { appId, name: gameName, headerUrl },
+    update: { headerUrl },
   });
 
   const userGame = await prisma.userGame.upsert({

@@ -74,6 +74,25 @@ export async function getPlayerAchievements(
   return data.playerstats?.achievements ?? [];
 }
 
+/**
+ * Newer Steam releases serve store art from a per-app hashed path
+ * (shared.akamai.steamstatic.com/store_item_assets/steam/apps/{appid}/{hash}/header.jpg)
+ * instead of the old predictable cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg
+ * pattern, so guessing the URL 404s for them. The Store API returns the
+ * real URL whatever the pattern.
+ */
+export async function getAppHeaderImage(appId: number): Promise<string | null> {
+  try {
+    const url = `https://store.steampowered.com/api/appdetails?appids=${appId}&filters=basic`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.[appId]?.data?.header_image ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export type SteamGlobalPercentage = {
   name: string;
   percent: number;
