@@ -23,6 +23,11 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  syncStartedAt DateTime?
+  syncTotal     Int?
+  syncProcessed Int?
+  syncError     String?
+
   games       UserGame[]
   favorites   FavoriteGame[]
   favoriteAchievements FavoriteAchievement[]

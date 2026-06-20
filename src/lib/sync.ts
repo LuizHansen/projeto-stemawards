@@ -30,7 +30,22 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-async function syncGame(userId: string, steamId: string, ownedGame: SteamOwnedGame) {
+async function syncGame(
+  userId: string,
+  steamId: string,
+  ownedGame: SteamOwnedGame,
+  onGameDone: () => Promise<void>,
+) {
+  try {
+    await syncGameInner(userId, steamId, ownedGame);
+  } catch (error) {
+    console.error(`Failed to sync game ${ownedGame.appid} (${ownedGame.name})`, error);
+  } finally {
+    await onGameDone();
+  }
+}
+
+async function syncGameInner(userId: string, steamId: string, ownedGame: SteamOwnedGame) {
   const game = await prisma.game.upsert({
     where: { appId: ownedGame.appid },
     create: {
@@ -155,11 +170,34 @@ async function syncGame(userId: string, steamId: string, ownedGame: SteamOwnedGa
 }
 
 export async function syncUserLibrary(userId: string, steamId: string) {
-  const ownedGames = await getOwnedGames(steamId);
+  try {
+    const ownedGames = await getOwnedGames(steamId);
 
-  await mapWithConcurrency(ownedGames, GAME_CONCURRENCY, (ownedGame) =>
-    syncGame(userId, steamId, ownedGame),
-  );
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        syncStartedAt: new Date(),
+        syncTotal: ownedGames.length,
+        syncProcessed: 0,
+        syncError: null,
+      },
+    });
 
-  return { gamesSynced: ownedGames.length };
+    const incrementProcessed = async () => {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { syncProcessed: { increment: 1 } },
+      });
+    };
+
+    await mapWithConcurrency(ownedGames, GAME_CONCURRENCY, (ownedGame) =>
+      syncGame(userId, steamId, ownedGame, incrementProcessed),
+    );
+
+    return { gamesSynced: ownedGames.length };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Sync failed";
+    await prisma.user.update({ where: { id: userId }, data: { syncError: message } });
+    throw error;
+  }
 }
