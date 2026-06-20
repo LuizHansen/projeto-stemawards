@@ -3,6 +3,7 @@ import Image from "next/image";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFamilyOverview } from "@/lib/family";
+import GameImage from "@/components/game-image";
 import SyncButton from "./sync-button";
 
 export default async function DashboardPage() {
@@ -16,13 +17,48 @@ export default async function DashboardPage() {
 
   const familyOverview = await getFamilyOverview(user.id);
 
-  const totalGames = userGames.length;
-  const totalAchievements = userGames.reduce((sum, g) => sum + g.achievementsTotal, 0);
-  const totalUnlocked = userGames.reduce((sum, g) => sum + g.achievementsUnlocked, 0);
+  let totalGames: number;
+  let totalAchievements: number;
+  let totalUnlocked: number;
+
+  if (familyOverview) {
+    // Family-wide KPIs: count each shared game once, using the best
+    // progress any member has reached on it (avoids double-counting the
+    // same achievements when multiple members own the same game).
+    totalGames = familyOverview.games.length;
+    totalAchievements = familyOverview.games.reduce(
+      (sum, g) => sum + Math.max(0, ...g.owners.map((o) => o.achievementsTotal)),
+      0,
+    );
+    totalUnlocked = familyOverview.games.reduce(
+      (sum, g) => sum + Math.max(0, ...g.owners.map((o) => o.achievementsUnlocked)),
+      0,
+    );
+  } else {
+    totalGames = userGames.length;
+    totalAchievements = userGames.reduce((sum, g) => sum + g.achievementsTotal, 0);
+    totalUnlocked = userGames.reduce((sum, g) => sum + g.achievementsUnlocked, 0);
+  }
+
   const totalRemaining = totalAchievements - totalUnlocked;
   const overallPercent = totalAchievements > 0 ? (totalUnlocked / totalAchievements) * 100 : 0;
 
-  const mostAdvanced = [...userGames]
+  const familyMostAdvanced = familyOverview
+    ? [...familyOverview.games]
+        .filter((g) => g.owners.some((o) => o.achievementsTotal > 0))
+        .sort((a, b) => {
+          const bestPercent = (g: typeof a) =>
+            Math.max(
+              ...g.owners.map((o) =>
+                o.achievementsTotal > 0 ? o.achievementsUnlocked / o.achievementsTotal : 0,
+              ),
+            );
+          return bestPercent(b) - bestPercent(a);
+        })
+        .slice(0, 5)
+    : [];
+
+  const personalMostAdvanced = [...userGames]
     .filter((g) => g.achievementsTotal > 0)
     .sort(
       (a, b) =>
@@ -66,7 +102,7 @@ export default async function DashboardPage() {
         <StatCard label="Conclusão geral" value={`${overallPercent.toFixed(1)}%`} />
       </section>
 
-      {userGames.length === 0 ? (
+      {totalGames === 0 ? (
         <p className="text-zinc-400">
           Nenhum jogo sincronizado ainda. Clique em &quot;Atualizar Progresso&quot; para
           importar sua biblioteca Steam.
@@ -75,9 +111,11 @@ export default async function DashboardPage() {
         <>
           <h2 className="text-lg font-semibold mb-4">Jogos mais avançados</h2>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-10">
-            {mostAdvanced.map((ug) => (
-              <GameCard key={ug.id} userGame={ug} />
-            ))}
+            {familyOverview
+              ? familyMostAdvanced.map((game) => (
+                  <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
+                ))
+              : personalMostAdvanced.map((ug) => <GameCard key={ug.id} userGame={ug} />)}
           </div>
 
           <h2 className="text-lg font-semibold mb-4">
@@ -126,15 +164,11 @@ function GameCard({
       href={`/games/${userGame.game.appId}`}
       className="rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden hover:border-zinc-600 transition-colors"
     >
-      {userGame.game.headerUrl && (
-        <Image
-          src={userGame.game.headerUrl}
-          alt={userGame.game.name}
-          width={460}
-          height={215}
-          className="w-full h-24 object-cover"
-        />
-      )}
+      <GameImage
+        appId={userGame.game.appId}
+        name={userGame.game.name}
+        className="w-full h-24 object-cover"
+      />
       <div className="p-3">
         <p className="text-sm font-medium truncate">{userGame.game.name}</p>
         <p className="text-xs text-zinc-400 mb-2">
@@ -172,15 +206,7 @@ function FamilyGameCard({
 
   const content = (
     <>
-      {game.headerUrl && (
-        <Image
-          src={game.headerUrl}
-          alt={game.name}
-          width={460}
-          height={215}
-          className="w-full h-24 object-cover"
-        />
-      )}
+      <GameImage appId={game.appId} name={game.name} className="w-full h-24 object-cover" />
       <div className="p-3">
         <p className="text-sm font-medium truncate">{game.name}</p>
         <div className="flex flex-wrap gap-1 mt-2">

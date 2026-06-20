@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { estimateDifficulty } from "@/lib/guides/difficulty";
+import GameImage from "@/components/game-image";
 import AchievementGuide from "./achievement-guide";
 
 export default async function GamePage({
@@ -56,15 +57,11 @@ export default async function GamePage({
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8">
       <div className="mb-8">
-        {game.headerUrl && (
-          <Image
-            src={game.headerUrl}
-            alt={game.name}
-            width={920}
-            height={430}
-            className="w-full max-h-64 object-cover rounded-lg mb-4"
-          />
-        )}
+        <GameImage
+          appId={game.appId}
+          name={game.name}
+          className="w-full max-h-64 object-cover rounded-lg mb-4"
+        />
         <h1 className="text-2xl font-bold">{game.name}</h1>
         <p className="text-zinc-400 text-sm mt-1">
           {Math.round(userGame.playtimeMinutes / 60)}h jogadas

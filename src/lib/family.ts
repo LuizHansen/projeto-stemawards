@@ -109,6 +109,28 @@ export async function getFamilyOverview(userId: string) {
 
   const games = Array.from(gamesByAppId.values()).sort((a, b) => a.name.localeCompare(b.name));
 
+  const memberStats = members
+    .map((m) => {
+      const gamesOwned = m.user.games.length;
+      const achievementsTotal = m.user.games.reduce((sum, ug) => sum + ug.achievementsTotal, 0);
+      const achievementsUnlocked = m.user.games.reduce(
+        (sum, ug) => sum + ug.achievementsUnlocked,
+        0,
+      );
+      const percent = achievementsTotal > 0 ? (achievementsUnlocked / achievementsTotal) * 100 : 0;
+
+      return {
+        userId: m.user.id,
+        username: m.user.username,
+        avatarUrl: m.user.avatarUrl,
+        gamesOwned,
+        achievementsTotal,
+        achievementsUnlocked,
+        percent,
+      };
+    })
+    .sort((a, b) => b.percent - a.percent);
+
   return {
     familyGroup,
     members: members.map((m) => ({
@@ -116,6 +138,7 @@ export async function getFamilyOverview(userId: string) {
       username: m.user.username,
       avatarUrl: m.user.avatarUrl,
     })),
+    memberStats,
     games,
   };
 }

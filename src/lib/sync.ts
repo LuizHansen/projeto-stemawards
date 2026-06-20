@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getUserFamilyGroup } from "@/lib/family";
 import {
   getOwnedGames,
   getGameSchema,
@@ -30,22 +31,89 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-async function syncGame(
-  userId: string,
-  steamId: string,
-  ownedGame: SteamOwnedGame,
-  onGameDone: () => Promise<void>,
-) {
+async function withProgress(onDone: () => Promise<void>, fn: () => Promise<void>, label: string) {
   try {
-    await syncGameInner(userId, steamId, ownedGame);
+    await fn();
   } catch (error) {
-    console.error(`Failed to sync game ${ownedGame.appid} (${ownedGame.name})`, error);
+    console.error(`Failed to sync ${label}`, error);
   } finally {
-    await onGameDone();
+    await onDone();
   }
 }
 
-async function syncGameInner(userId: string, steamId: string, ownedGame: SteamOwnedGame) {
+/**
+ * Fetches and persists achievement state for a game/userGame pair. Shared
+ * between owned-game syncing and family-shared-game probing, since the
+ * Steam endpoints and upsert logic are identical either way.
+ */
+async function syncAchievements(
+  steamId: string,
+  appId: number,
+  gameId: string,
+  userGameId: string,
+): Promise<{ total: number; unlocked: number }> {
+  const [schema, playerAchievements, globalPercentages] = await Promise.all([
+    getGameSchema(appId),
+    getPlayerAchievements(steamId, appId),
+    getGlobalAchievementPercentages(appId),
+  ]);
+
+  const percentByName = new Map(globalPercentages.map((p) => [p.name, p.percent]));
+  const achievedByName = new Map(playerAchievements.map((a) => [a.apiname, a]));
+
+  const unlockedFlags = await mapWithConcurrency(schema, ACHIEVEMENT_CONCURRENCY, async (def) => {
+    const achievement = await prisma.achievement.upsert({
+      where: { gameId_apiName: { gameId, apiName: def.name } },
+      create: {
+        gameId,
+        apiName: def.name,
+        displayName: def.displayName,
+        description: def.description,
+        iconUrl: def.icon,
+        iconGrayUrl: def.icongray,
+        globalPercent: percentByName.get(def.name) ?? null,
+      },
+      update: {
+        displayName: def.displayName,
+        description: def.description,
+        iconUrl: def.icon,
+        iconGrayUrl: def.icongray,
+        globalPercent: percentByName.get(def.name) ?? null,
+      },
+    });
+
+    const playerAchievement = achievedByName.get(def.name);
+    const unlocked = playerAchievement?.achieved === 1;
+
+    await prisma.userAchievement.upsert({
+      where: {
+        userGameId_achievementId: { userGameId, achievementId: achievement.id },
+      },
+      create: {
+        userGameId,
+        achievementId: achievement.id,
+        unlocked,
+        unlockedAt:
+          unlocked && playerAchievement?.unlocktime
+            ? new Date(playerAchievement.unlocktime * 1000)
+            : null,
+      },
+      update: {
+        unlocked,
+        unlockedAt:
+          unlocked && playerAchievement?.unlocktime
+            ? new Date(playerAchievement.unlocktime * 1000)
+            : null,
+      },
+    });
+
+    return unlocked;
+  });
+
+  return { total: schema.length, unlocked: unlockedFlags.filter(Boolean).length };
+}
+
+async function syncOwnedGame(userId: string, steamId: string, ownedGame: SteamOwnedGame) {
   const game = await prisma.game.upsert({
     where: { appId: ownedGame.appid },
     create: {
@@ -85,102 +153,78 @@ async function syncGameInner(userId: string, steamId: string, ownedGame: SteamOw
     return;
   }
 
-  const [schema, playerAchievements, globalPercentages] = await Promise.all([
-    getGameSchema(ownedGame.appid),
-    getPlayerAchievements(steamId, ownedGame.appid),
-    getGlobalAchievementPercentages(ownedGame.appid),
-  ]);
-
-  const percentByName = new Map(globalPercentages.map((p) => [p.name, p.percent]));
-  const achievedByName = new Map(playerAchievements.map((a) => [a.apiname, a]));
-
   const userGame = await prisma.userGame.upsert({
     where: { userId_gameId: { userId, gameId: game.id } },
-    create: {
-      userId,
-      gameId: game.id,
-      playtimeMinutes: ownedGame.playtime_forever,
-      lastPlayedAt,
-      achievementsTotal: schema.length,
-    },
-    update: {
-      playtimeMinutes: ownedGame.playtime_forever,
-      lastPlayedAt,
-      achievementsTotal: schema.length,
-      syncedAt: new Date(),
-    },
+    create: { userId, gameId: game.id, playtimeMinutes: ownedGame.playtime_forever, lastPlayedAt },
+    update: { playtimeMinutes: ownedGame.playtime_forever, lastPlayedAt, syncedAt: new Date() },
   });
 
-  const unlockedFlags = await mapWithConcurrency(schema, ACHIEVEMENT_CONCURRENCY, async (def) => {
-      const achievement = await prisma.achievement.upsert({
-        where: { gameId_apiName: { gameId: game.id, apiName: def.name } },
-        create: {
-          gameId: game.id,
-          apiName: def.name,
-          displayName: def.displayName,
-          description: def.description,
-          iconUrl: def.icon,
-          iconGrayUrl: def.icongray,
-          globalPercent: percentByName.get(def.name) ?? null,
-        },
-        update: {
-          displayName: def.displayName,
-          description: def.description,
-          iconUrl: def.icon,
-          iconGrayUrl: def.icongray,
-          globalPercent: percentByName.get(def.name) ?? null,
-        },
-      });
-
-      const playerAchievement = achievedByName.get(def.name);
-      const unlocked = playerAchievement?.achieved === 1;
-
-      await prisma.userAchievement.upsert({
-        where: {
-          userGameId_achievementId: {
-            userGameId: userGame.id,
-            achievementId: achievement.id,
-          },
-        },
-        create: {
-          userGameId: userGame.id,
-          achievementId: achievement.id,
-          unlocked,
-          unlockedAt:
-            unlocked && playerAchievement?.unlocktime
-              ? new Date(playerAchievement.unlocktime * 1000)
-              : null,
-        },
-        update: {
-          unlocked,
-          unlockedAt:
-            unlocked && playerAchievement?.unlocktime
-              ? new Date(playerAchievement.unlocktime * 1000)
-              : null,
-        },
-      });
-
-    return unlocked;
-  });
+  const { total, unlocked } = await syncAchievements(steamId, ownedGame.appid, game.id, userGame.id);
 
   await prisma.userGame.update({
     where: { id: userGame.id },
-    data: { achievementsUnlocked: unlockedFlags.filter(Boolean).length },
+    data: { achievementsTotal: total, achievementsUnlocked: unlocked },
+  });
+}
+
+/**
+ * Achievement unlock state is tied to the Steam account, not to game
+ * ownership - so a game borrowed via Family Sharing (which never shows up
+ * in this account's GetOwnedGames) can still have real progress fetchable
+ * through GetPlayerAchievements. Probe family-owned games this user
+ * doesn't own directly and record their progress if Steam returns any.
+ */
+async function probeFamilySharedGame(userId: string, steamId: string, appId: number, gameName: string) {
+  const playerAchievements = await getPlayerAchievements(steamId, appId);
+  if (playerAchievements.length === 0) return;
+
+  const game = await prisma.game.upsert({
+    where: { appId },
+    create: {
+      appId,
+      name: gameName,
+      headerUrl: `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    },
+    update: {},
+  });
+
+  const userGame = await prisma.userGame.upsert({
+    where: { userId_gameId: { userId, gameId: game.id } },
+    create: { userId, gameId: game.id, playtimeMinutes: 0 },
+    update: { syncedAt: new Date() },
+  });
+
+  const { total, unlocked } = await syncAchievements(steamId, appId, game.id, userGame.id);
+
+  await prisma.userGame.update({
+    where: { id: userGame.id },
+    data: { achievementsTotal: total, achievementsUnlocked: unlocked },
   });
 }
 
 export async function syncUserLibrary(userId: string, steamId: string) {
   try {
     const ownedGames = await getOwnedGames(steamId);
+    const ownedAppIds = new Set(ownedGames.map((g) => g.appid));
+
+    const familyGroup = await getUserFamilyGroup(userId);
+    const sharedCandidates = familyGroup
+      ? await prisma.userGame.findMany({
+          where: {
+            user: { familyMemberships: { some: { familyGroupId: familyGroup.id } } },
+            userId: { not: userId },
+          },
+          include: { game: true },
+          distinct: ["gameId"],
+        })
+      : [];
+    const unownedSharedGames = sharedCandidates.filter((ug) => !ownedAppIds.has(ug.game.appId));
+
+    const total = ownedGames.length + unownedSharedGames.length;
 
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        syncStartedAt: new Date(),
-        syncTotal: ownedGames.length,
-        syncProcessed: 0,
-        syncError: null,
-      },
+      data: { syncStartedAt: new Date(), syncTotal: total, syncProcessed: 0, syncError: null },
     });
 
     const incrementProcessed = async () => {
@@ -191,10 +235,22 @@ export async function syncUserLibrary(userId: string, steamId: string) {
     };
 
     await mapWithConcurrency(ownedGames, GAME_CONCURRENCY, (ownedGame) =>
-      syncGame(userId, steamId, ownedGame, incrementProcessed),
+      withProgress(
+        incrementProcessed,
+        () => syncOwnedGame(userId, steamId, ownedGame),
+        `${ownedGame.appid} (${ownedGame.name})`,
+      ),
     );
 
-    return { gamesSynced: ownedGames.length };
+    await mapWithConcurrency(unownedSharedGames, GAME_CONCURRENCY, (ug) =>
+      withProgress(
+        incrementProcessed,
+        () => probeFamilySharedGame(userId, steamId, ug.game.appId, ug.game.name),
+        `${ug.game.appId} (${ug.game.name}, shared)`,
+      ),
+    );
+
+    return { gamesSynced: ownedGames.length, sharedGamesProbed: unownedSharedGames.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sync failed";
     await prisma.user.update({ where: { id: userId }, data: { syncError: message } });

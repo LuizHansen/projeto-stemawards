@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import GameImage from "@/components/game-image";
 
 type Owner = {
   userId: string;
@@ -20,9 +21,20 @@ type FamilyGame = {
   owners: Owner[];
 };
 
+type MemberStats = {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  gamesOwned: number;
+  achievementsTotal: number;
+  achievementsUnlocked: number;
+  percent: number;
+};
+
 type Overview = {
   familyGroup: { id: string; name: string; inviteCode: string };
   members: { userId: string; username: string; avatarUrl: string | null }[];
+  memberStats: MemberStats[];
   games: FamilyGame[];
 };
 
@@ -163,13 +175,39 @@ export default function FamilyClient({ currentUserId }: { currentUserId: string 
         </button>
       </div>
 
-      <div className="flex gap-3 mb-8">
-        {overview.members.map((m) => (
-          <div key={m.userId} className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-full px-3 py-1.5">
+      <h2 className="text-lg font-semibold mb-4">Comparação entre membros</h2>
+      <div className="grid gap-2 mb-8">
+        {overview.memberStats.map((m, index) => (
+          <div
+            key={m.userId}
+            className={`flex items-center gap-4 rounded-lg border p-3 ${
+              m.userId === currentUserId
+                ? "border-emerald-800 bg-emerald-950/30"
+                : "border-zinc-800 bg-zinc-900"
+            }`}
+          >
+            <span className="text-zinc-500 text-sm w-5 text-center">#{index + 1}</span>
             {m.avatarUrl && (
-              <Image src={m.avatarUrl} alt={m.username} width={24} height={24} className="rounded-full" />
+              <Image
+                src={m.avatarUrl}
+                alt={m.username}
+                width={36}
+                height={36}
+                className="rounded-full"
+              />
             )}
-            <span className="text-sm">{m.username}</span>
+            <div className="flex-1">
+              <p className="font-medium text-sm">{m.username}</p>
+              <p className="text-xs text-zinc-400">
+                {m.gamesOwned} jogos · {m.achievementsUnlocked}/{m.achievementsTotal} conquistas
+              </p>
+            </div>
+            <div className="w-32">
+              <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500" style={{ width: `${m.percent}%` }} />
+              </div>
+              <p className="text-xs text-zinc-400 mt-1 text-right">{m.percent.toFixed(1)}%</p>
+            </div>
           </div>
         ))}
       </div>
@@ -178,46 +216,58 @@ export default function FamilyClient({ currentUserId }: { currentUserId: string 
         Biblioteca combinada ({overview.games.length} jogos)
       </h2>
       <div className="grid gap-3">
-        {overview.games.map((game) => (
-          <Link
-            key={game.gameId}
-            href={`/games/${game.appId}`}
-            className="flex items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-600 p-3"
-          >
-            {game.headerUrl && (
-              <Image
-                src={game.headerUrl}
-                alt={game.name}
-                width={120}
-                height={56}
-                className="w-28 h-14 object-cover rounded"
-              />
-            )}
-            <div className="flex-1">
-              <p className="font-medium">{game.name}</p>
-              <div className="flex gap-2 mt-1 flex-wrap">
-                {game.owners.map((owner) => {
-                  const percent =
-                    owner.achievementsTotal > 0
-                      ? (owner.achievementsUnlocked / owner.achievementsTotal) * 100
-                      : 0;
-                  return (
-                    <span
-                      key={owner.userId}
-                      className={`text-xs rounded-full px-2 py-0.5 ${
-                        owner.userId === currentUserId
-                          ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800"
-                          : "bg-zinc-800 text-zinc-300 border border-zinc-700"
-                      }`}
-                    >
-                      {owner.username}: {percent.toFixed(0)}%
-                    </span>
-                  );
-                })}
+        {overview.games.map((game) => {
+          const ownedByMe = game.owners.some((o) => o.userId === currentUserId);
+          const content = (
+            <>
+              <GameImage appId={game.appId} name={game.name} className="w-28 h-14 object-cover rounded shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium">{game.name}</p>
+                <div className="flex gap-2 mt-1 flex-wrap">
+                  {game.owners.map((owner) => {
+                    const percent =
+                      owner.achievementsTotal > 0
+                        ? (owner.achievementsUnlocked / owner.achievementsTotal) * 100
+                        : 0;
+                    return (
+                      <span
+                        key={owner.userId}
+                        className={`text-xs rounded-full px-2 py-0.5 ${
+                          owner.userId === currentUserId
+                            ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800"
+                            : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                        }`}
+                      >
+                        {owner.username}: {percent.toFixed(0)}%
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </Link>
-        ))}
+            </>
+          );
+
+          if (!ownedByMe) {
+            return (
+              <div
+                key={game.gameId}
+                className="flex items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-3 opacity-80"
+              >
+                {content}
+              </div>
+            );
+          }
+
+          return (
+            <Link
+              key={game.gameId}
+              href={`/games/${game.appId}`}
+              className="flex items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-600 p-3"
+            >
+              {content}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
