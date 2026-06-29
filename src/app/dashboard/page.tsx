@@ -123,7 +123,7 @@ export default async function DashboardPage() {
         ) : (
           <>
             <h2 className="text-lg font-semibold mb-4">Jogos mais avançados</h2>
-            <div className="grid [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))] gap-4 mb-10">
+            <div className="grid [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] gap-x-4 gap-y-10 mb-14">
               {familyOverview
                 ? familyMostAdvanced.map((game) => (
                     <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
@@ -136,7 +136,7 @@ export default async function DashboardPage() {
                 ? `Biblioteca da família (${familyOverview.games.length})`
                 : "Biblioteca"}
             </h2>
-            <div className="grid [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))] gap-4">
+            <div className="grid [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] gap-x-4 gap-y-10">
               {familyOverview
                 ? familyOverview.games.map((game) => (
                     <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
@@ -176,28 +176,29 @@ function GameCard({
       : 0;
 
   return (
-    <Link
-      href={`/games/${userGame.game.appId}`}
-      className="group relative aspect-[3/4] rounded-xl overflow-hidden border border-zinc-800 hover:border-zinc-500 transition-colors"
-    >
-      <GameImage
-        appId={userGame.game.appId}
-        name={userGame.game.name}
-        className="absolute inset-0 w-full h-full object-cover"
-      />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-3">
-        <p className="text-sm font-semibold leading-tight drop-shadow">{userGame.game.name}</p>
-        <p className="text-xs text-zinc-300 mt-1">
-          {Math.round(userGame.playtimeMinutes / 60)}h · {percent.toFixed(0)}%
-        </p>
-        <div className="overflow-hidden max-h-0 group-hover:max-h-16 transition-all duration-300">
-          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mt-2">
-            <div className="h-full bg-emerald-400" style={{ width: `${percent}%` }} />
-          </div>
-          <p className="text-xs text-zinc-300 mt-1.5">
-            {userGame.achievementsUnlocked}/{userGame.achievementsTotal} conquistas
+    <Link href={`/games/${userGame.game.appId}`} className="group relative block">
+      <div className="rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 transition-all duration-300 ease-out group-hover:scale-110 group-hover:z-20 group-hover:shadow-2xl group-hover:border-zinc-600">
+        <div className="aspect-video w-full relative">
+          <GameImage
+            appId={userGame.game.appId}
+            name={userGame.game.name}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        </div>
+        <div className="px-3 py-2">
+          <p className="text-sm font-semibold leading-tight truncate">{userGame.game.name}</p>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            {Math.round(userGame.playtimeMinutes / 60)}h jogadas
           </p>
+          <div className="max-h-0 opacity-0 group-hover:max-h-16 group-hover:opacity-100 overflow-hidden transition-all duration-300">
+            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mt-2">
+              <div className="h-full bg-emerald-400" style={{ width: `${percent}%` }} />
+            </div>
+            <p className="text-xs text-zinc-300 mt-1.5">
+              {userGame.achievementsUnlocked}/{userGame.achievementsTotal} conquistas (
+              {percent.toFixed(0)}%)
+            </p>
+          </div>
         </div>
       </div>
     </Link>
@@ -232,22 +233,30 @@ function FamilyGameCard({
   );
 
   const content = (
-    <>
-      <GameImage appId={game.appId} name={game.name} className="absolute inset-0 w-full h-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-3">
-        <p className="text-sm font-semibold leading-tight drop-shadow">{game.name}</p>
+    <div
+      className={`rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 transition-all duration-300 ease-out group-hover:scale-110 group-hover:z-20 group-hover:shadow-2xl ${
+        ownedByMe ? "group-hover:border-zinc-600" : ""
+      }`}
+    >
+      <div className="aspect-video w-full relative">
+        <GameImage appId={game.appId} name={game.name} className="absolute inset-0 w-full h-full object-cover" />
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-sm font-semibold leading-tight truncate">{game.name}</p>
         {myProgress ? (
-          <p className="text-xs text-zinc-300 mt-1">
+          <p className="text-xs text-zinc-400 mt-0.5">
             Você:{" "}
             {myProgress.achievementsTotal > 0
               ? `${((myProgress.achievementsUnlocked / myProgress.achievementsTotal) * 100).toFixed(0)}%`
               : "0%"}
           </p>
         ) : (
-          <p className="text-xs text-zinc-400 mt-1">Você não possui</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Você não possui ·{" "}
+            {bestProgress > 0 ? `melhor: ${(bestProgress * 100).toFixed(0)}%` : "0%"}
+          </p>
         )}
-        <div className="overflow-hidden max-h-0 group-hover:max-h-24 transition-all duration-300">
+        <div className="max-h-0 opacity-0 group-hover:max-h-24 group-hover:opacity-100 overflow-hidden transition-all duration-300">
           <div className="flex flex-wrap gap-1 mt-2">
             {game.owners.map((owner) => {
               const percent =
@@ -260,7 +269,7 @@ function FamilyGameCard({
                   className={`text-[10px] rounded-full px-1.5 py-0.5 ${
                     owner.userId === currentUserId
                       ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800"
-                      : "bg-black/40 text-zinc-300 border border-zinc-700"
+                      : "bg-zinc-800 text-zinc-300 border border-zinc-700"
                   }`}
                 >
                   {owner.username}: {percent.toFixed(0)}%
@@ -270,24 +279,15 @@ function FamilyGameCard({
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 
-  const cardClassName = "group relative aspect-[3/4] rounded-xl overflow-hidden border transition-colors";
-
   if (!ownedByMe) {
-    return (
-      <div
-        className={`${cardClassName} border-zinc-800 opacity-75`}
-        title={`Melhor progresso na família: ${bestProgress > 0 ? `${(bestProgress * 100).toFixed(0)}%` : "0%"}`}
-      >
-        {content}
-      </div>
-    );
+    return <div className="group relative block opacity-75">{content}</div>;
   }
 
   return (
-    <Link href={`/games/${game.appId}`} className={`${cardClassName} border-zinc-800 hover:border-zinc-500`}>
+    <Link href={`/games/${game.appId}`} className="group relative block">
       {content}
     </Link>
   );
