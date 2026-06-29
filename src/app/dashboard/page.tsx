@@ -67,77 +67,85 @@ export default async function DashboardPage() {
     .slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8">
-      <header className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          {user.avatarUrl && (
-            <Image
-              src={user.avatarUrl}
-              alt={user.username}
-              width={48}
-              height={48}
-              className="rounded-full"
-            />
-          )}
-          <div>
-            <h1 className="text-xl font-semibold">{user.username}</h1>
-            <p className="text-sm text-zinc-400">SteamID: {user.steamId}</p>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <header className="sticky top-0 z-10 backdrop-blur-md bg-zinc-950/80 border-b border-zinc-800">
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3">
+            {user.avatarUrl && (
+              <Image
+                src={user.avatarUrl}
+                alt={user.username}
+                width={44}
+                height={44}
+                className="rounded-full"
+              />
+            )}
+            <div>
+              <h1 className="text-base font-semibold leading-tight">{user.username}</h1>
+              <p className="text-xs text-zinc-500">SteamID: {user.steamId}</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {familyOverview && (
-            <Link
-              href="/family#comparacao"
-              className="rounded-full border border-zinc-700 hover:border-zinc-500 text-zinc-200 text-sm font-medium px-4 py-2 transition-colors"
-            >
-              Comparar KPIs
+          <div className="flex items-center gap-3">
+            {familyOverview && (
+              <Link
+                href="/family#comparacao"
+                className="rounded-full border border-zinc-700 hover:border-zinc-500 text-zinc-200 text-sm font-medium px-4 py-2 transition-colors"
+              >
+                Comparar KPIs
+              </Link>
+            )}
+            <Link href="/family" className="text-sm text-zinc-400 hover:text-zinc-200">
+              Família
             </Link>
-          )}
-          <Link href="/family" className="text-sm text-zinc-400 hover:text-zinc-200">
-            Família
-          </Link>
-          <SyncButton />
-          <form action="/api/auth/logout" method="post">
-            <button className="text-sm text-zinc-400 hover:text-zinc-200">Sair</button>
-          </form>
+            <SyncButton />
+            <form action="/api/auth/logout" method="post">
+              <button className="text-sm text-zinc-400 hover:text-zinc-200">Sair</button>
+            </form>
+          </div>
         </div>
       </header>
 
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-        <StatCard label="Jogos" value={totalGames} />
-        <StatCard label="Conquistas obtidas" value={totalUnlocked} />
-        <StatCard label="Conquistas restantes" value={totalRemaining} />
-        <StatCard label="Conclusão geral" value={`${overallPercent.toFixed(1)}%`} />
-      </section>
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+          <StatCard label="Jogos" value={totalGames} />
+          <StatCard label="Conquistas obtidas" value={totalUnlocked} />
+          <StatCard label="Conquistas restantes" value={totalRemaining} />
+          <StatCard label="Conclusão geral" value={`${overallPercent.toFixed(1)}%`} />
+        </section>
 
-      {totalGames === 0 ? (
-        <p className="text-zinc-400">
-          Nenhum jogo sincronizado ainda. Clique em &quot;Atualizar Progresso&quot; para
-          importar sua biblioteca Steam.
-        </p>
-      ) : (
-        <>
-          <h2 className="text-lg font-semibold mb-4">Jogos mais avançados</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-10">
-            {familyOverview
-              ? familyMostAdvanced.map((game) => (
-                  <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
-                ))
-              : personalMostAdvanced.map((ug) => <GameCard key={ug.id} userGame={ug} />)}
+        {totalGames === 0 ? (
+          <div className="rounded-xl border border-dashed border-zinc-800 p-10 text-center">
+            <p className="text-zinc-400">
+              Nenhum jogo sincronizado ainda. Clique em &quot;Atualizar Progresso&quot; para
+              importar sua biblioteca Steam.
+            </p>
           </div>
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold mb-4">Jogos mais avançados</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-10">
+              {familyOverview
+                ? familyMostAdvanced.map((game) => (
+                    <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
+                  ))
+                : personalMostAdvanced.map((ug) => <GameCard key={ug.id} userGame={ug} />)}
+            </div>
 
-          <h2 className="text-lg font-semibold mb-4">
-            {familyOverview ? `Biblioteca da família (${familyOverview.games.length})` : "Biblioteca"}
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-            {familyOverview
-              ? familyOverview.games.map((game) => (
-                  <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
-                ))
-              : userGames.map((ug) => <GameCard key={ug.id} userGame={ug} />)}
-          </div>
-        </>
-      )}
+            <h2 className="text-lg font-semibold mb-4">
+              {familyOverview
+                ? `Biblioteca da família (${familyOverview.games.length})`
+                : "Biblioteca"}
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+              {familyOverview
+                ? familyOverview.games.map((game) => (
+                    <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
+                  ))
+                : userGames.map((ug) => <GameCard key={ug.id} userGame={ug} />)}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import BackLink from "@/components/back-link";
 import RoadmapView from "./roadmap-view";
 
 export default async function RoadmapPage({
@@ -41,12 +41,12 @@ export default async function RoadmapPage({
   );
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8">
-      <Link href={`/games/${appId}`} className="text-sm text-zinc-400 hover:text-zinc-200 mb-4 inline-block">
-        ← Voltar para {game.name}
-      </Link>
-      <h1 className="text-2xl font-bold mb-6">{game.name} — Roadmap de Conquistas</h1>
-      <RoadmapView appId={appId} achievementsById={achievementsById} />
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        <BackLink href={`/games/${appId}`} label={`Voltar para ${game.name}`} />
+        <h1 className="text-2xl font-bold mb-6">{game.name} — Roadmap de Conquistas</h1>
+        <RoadmapView appId={appId} achievementsById={achievementsById} />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import AchievementModal from "@/components/achievement-modal";
 
 type Stage = {
   title: string;
@@ -25,6 +26,7 @@ export default function RoadmapView({
   const [stages, setStages] = useState<Stage[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAchievementId, setSelectedAchievementId] = useState<string | null>(null);
 
   async function load(refresh = false) {
     setLoading(true);
@@ -88,9 +90,10 @@ export default function RoadmapView({
                     const achievement = achievementsById[id];
                     if (!achievement) return null;
                     return (
-                      <span
+                      <button
                         key={id}
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs ${
+                        onClick={() => setSelectedAchievementId(id)}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs hover:brightness-125 transition cursor-pointer ${
                           achievement.unlocked
                             ? "border-emerald-800 bg-emerald-950/40 text-emerald-300"
                             : "border-zinc-700 bg-zinc-800 text-zinc-300"
@@ -101,7 +104,7 @@ export default function RoadmapView({
                           <img src={achievement.iconUrl} alt="" className="w-4 h-4 rounded-sm" />
                         )}
                         {achievement.displayName}
-                      </span>
+                      </button>
                     );
                   })}
                 </div>
@@ -110,6 +113,21 @@ export default function RoadmapView({
           ))}
         </div>
       )}
+
+      {selectedAchievementId &&
+        achievementsById[selectedAchievementId] &&
+        (() => {
+          const achievement = achievementsById[selectedAchievementId];
+          return (
+            <AchievementModal
+              achievementId={selectedAchievementId}
+              displayName={achievement.displayName}
+              iconUrl={achievement.iconUrl}
+              unlocked={achievement.unlocked}
+              onClose={() => setSelectedAchievementId(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { estimateDifficulty, type DifficultyLevel } from "@/lib/guides/difficulty";
 import GameImage from "@/components/game-image";
+import BackLink from "@/components/back-link";
 import AchievementGuide from "./achievement-guide";
 
 const DIFFICULTY_ORDER: DifficultyLevel[] = [
@@ -75,7 +76,9 @@ export default async function GamePage({
       : null;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="max-w-4xl mx-auto px-6 py-8">
+      <BackLink href="/dashboard" label="Voltar para o dashboard" />
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden mb-8">
         <GameImage appId={game.appId} name={game.name} className="w-full max-h-64 object-cover" />
         <div className="p-5">
@@ -131,6 +134,7 @@ export default async function GamePage({
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 }
