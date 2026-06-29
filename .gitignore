@@ -67,3 +67,6 @@ Thumbs.db
 .aiox-core/local/
 .claude/settings.local.json
 .aiox/install-log.txt
+
+# Claude Code control-plane config (left out of git pending review)
+.claude/
