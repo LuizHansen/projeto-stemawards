@@ -123,7 +123,7 @@ export default async function DashboardPage() {
         ) : (
           <>
             <h2 className="text-lg font-semibold mb-4">Jogos mais avançados</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-10">
+            <div className="grid [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))] gap-4 mb-10">
               {familyOverview
                 ? familyMostAdvanced.map((game) => (
                     <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
@@ -136,7 +136,7 @@ export default async function DashboardPage() {
                 ? `Biblioteca da família (${familyOverview.games.length})`
                 : "Biblioteca"}
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div className="grid [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))] gap-4">
               {familyOverview
                 ? familyOverview.games.map((game) => (
                     <FamilyGameCard key={game.gameId} game={game} currentUserId={user.id} />
@@ -178,24 +178,27 @@ function GameCard({
   return (
     <Link
       href={`/games/${userGame.game.appId}`}
-      className="rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden hover:border-zinc-600 transition-colors"
+      className="group relative aspect-[3/4] rounded-xl overflow-hidden border border-zinc-800 hover:border-zinc-500 transition-colors"
     >
       <GameImage
         appId={userGame.game.appId}
         name={userGame.game.name}
-        className="w-full h-24 object-cover"
+        className="absolute inset-0 w-full h-full object-cover"
       />
-      <div className="p-3">
-        <p className="text-sm font-medium truncate">{userGame.game.name}</p>
-        <p className="text-xs text-zinc-400 mb-2">
-          {Math.round(userGame.playtimeMinutes / 60)}h jogadas
+      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 p-3">
+        <p className="text-sm font-semibold leading-tight drop-shadow">{userGame.game.name}</p>
+        <p className="text-xs text-zinc-300 mt-1">
+          {Math.round(userGame.playtimeMinutes / 60)}h · {percent.toFixed(0)}%
         </p>
-        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-          <div className="h-full bg-emerald-500" style={{ width: `${percent}%` }} />
+        <div className="overflow-hidden max-h-0 group-hover:max-h-16 transition-all duration-300">
+          <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mt-2">
+            <div className="h-full bg-emerald-400" style={{ width: `${percent}%` }} />
+          </div>
+          <p className="text-xs text-zinc-300 mt-1.5">
+            {userGame.achievementsUnlocked}/{userGame.achievementsTotal} conquistas
+          </p>
         </div>
-        <p className="text-xs text-zinc-400 mt-1">
-          {userGame.achievementsUnlocked}/{userGame.achievementsTotal} ({percent.toFixed(0)}%)
-        </p>
       </div>
     </Link>
   );
@@ -219,49 +222,72 @@ function FamilyGameCard({
   currentUserId: string;
 }) {
   const ownedByMe = game.owners.some((o) => o.userId === currentUserId);
+  const myProgress = game.owners.find((o) => o.userId === currentUserId);
+  const bestProgress = game.owners.reduce(
+    (best, o) =>
+      o.achievementsTotal > 0 && o.achievementsUnlocked / o.achievementsTotal > best
+        ? o.achievementsUnlocked / o.achievementsTotal
+        : best,
+    0,
+  );
 
   const content = (
     <>
-      <GameImage appId={game.appId} name={game.name} className="w-full h-24 object-cover" />
-      <div className="p-3">
-        <p className="text-sm font-medium truncate">{game.name}</p>
-        <div className="flex flex-wrap gap-1 mt-2">
-          {game.owners.map((owner) => {
-            const percent =
-              owner.achievementsTotal > 0
-                ? (owner.achievementsUnlocked / owner.achievementsTotal) * 100
-                : 0;
-            return (
-              <span
-                key={owner.userId}
-                className={`text-xs rounded-full px-2 py-0.5 ${
-                  owner.userId === currentUserId
-                    ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800"
-                    : "bg-zinc-800 text-zinc-300 border border-zinc-700"
-                }`}
-              >
-                {owner.username}: {percent.toFixed(0)}%
-              </span>
-            );
-          })}
+      <GameImage appId={game.appId} name={game.name} className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 p-3">
+        <p className="text-sm font-semibold leading-tight drop-shadow">{game.name}</p>
+        {myProgress ? (
+          <p className="text-xs text-zinc-300 mt-1">
+            Você:{" "}
+            {myProgress.achievementsTotal > 0
+              ? `${((myProgress.achievementsUnlocked / myProgress.achievementsTotal) * 100).toFixed(0)}%`
+              : "0%"}
+          </p>
+        ) : (
+          <p className="text-xs text-zinc-400 mt-1">Você não possui</p>
+        )}
+        <div className="overflow-hidden max-h-0 group-hover:max-h-24 transition-all duration-300">
+          <div className="flex flex-wrap gap-1 mt-2">
+            {game.owners.map((owner) => {
+              const percent =
+                owner.achievementsTotal > 0
+                  ? (owner.achievementsUnlocked / owner.achievementsTotal) * 100
+                  : 0;
+              return (
+                <span
+                  key={owner.userId}
+                  className={`text-[10px] rounded-full px-1.5 py-0.5 ${
+                    owner.userId === currentUserId
+                      ? "bg-emerald-950/60 text-emerald-300 border border-emerald-800"
+                      : "bg-black/40 text-zinc-300 border border-zinc-700"
+                  }`}
+                >
+                  {owner.username}: {percent.toFixed(0)}%
+                </span>
+              );
+            })}
+          </div>
         </div>
       </div>
     </>
   );
 
+  const cardClassName = "group relative aspect-[3/4] rounded-xl overflow-hidden border transition-colors";
+
   if (!ownedByMe) {
     return (
-      <div className="rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden opacity-80">
+      <div
+        className={`${cardClassName} border-zinc-800 opacity-75`}
+        title={`Melhor progresso na família: ${bestProgress > 0 ? `${(bestProgress * 100).toFixed(0)}%` : "0%"}`}
+      >
         {content}
       </div>
     );
   }
 
   return (
-    <Link
-      href={`/games/${game.appId}`}
-      className="rounded-lg bg-zinc-900 border border-zinc-800 overflow-hidden hover:border-zinc-600 transition-colors"
-    >
+    <Link href={`/games/${game.appId}`} className={`${cardClassName} border-zinc-800 hover:border-zinc-500`}>
       {content}
     </Link>
   );
