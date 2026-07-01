@@ -118,6 +118,11 @@ export async function getFamilyOverview(userId: string) {
         0,
       );
       const percent = achievementsTotal > 0 ? (achievementsUnlocked / achievementsTotal) * 100 : 0;
+      const totalPlaytimeMinutes = m.user.games.reduce((sum, ug) => sum + ug.playtimeMinutes, 0);
+      // "Platinado" = every achievement in a game with achievements unlocked.
+      const perfectGames = m.user.games.filter(
+        (ug) => ug.achievementsTotal > 0 && ug.achievementsUnlocked === ug.achievementsTotal,
+      ).length;
 
       return {
         userId: m.user.id,
@@ -127,6 +132,8 @@ export async function getFamilyOverview(userId: string) {
         achievementsTotal,
         achievementsUnlocked,
         percent,
+        totalPlaytimeMinutes,
+        perfectGames,
       };
     })
     .sort((a, b) => b.percent - a.percent);

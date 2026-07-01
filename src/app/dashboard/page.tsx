@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFamilyOverview } from "@/lib/family";
 import GameImage from "@/components/game-image";
+import RadialProgress from "@/components/charts/radial-progress";
 import SyncButton from "./sync-button";
 
 export default async function DashboardPage() {
@@ -17,31 +18,16 @@ export default async function DashboardPage() {
 
   const familyOverview = await getFamilyOverview(user.id);
 
-  let totalGames: number;
-  let totalAchievements: number;
-  let totalUnlocked: number;
-
-  if (familyOverview) {
-    // Family-wide KPIs: count each shared game once, using the best
-    // progress any member has reached on it (avoids double-counting the
-    // same achievements when multiple members own the same game).
-    totalGames = familyOverview.games.length;
-    totalAchievements = familyOverview.games.reduce(
-      (sum, g) => sum + Math.max(0, ...g.owners.map((o) => o.achievementsTotal)),
-      0,
-    );
-    totalUnlocked = familyOverview.games.reduce(
-      (sum, g) => sum + Math.max(0, ...g.owners.map((o) => o.achievementsUnlocked)),
-      0,
-    );
-  } else {
-    totalGames = userGames.length;
-    totalAchievements = userGames.reduce((sum, g) => sum + g.achievementsTotal, 0);
-    totalUnlocked = userGames.reduce((sum, g) => sum + g.achievementsUnlocked, 0);
-  }
-
+  // Top KPIs always reflect the logged-in user's own numbers (family-wide
+  // comparison lives on the /family page instead).
+  const totalGames = userGames.length;
+  const totalAchievements = userGames.reduce((sum, g) => sum + g.achievementsTotal, 0);
+  const totalUnlocked = userGames.reduce((sum, g) => sum + g.achievementsUnlocked, 0);
   const totalRemaining = totalAchievements - totalUnlocked;
   const overallPercent = totalAchievements > 0 ? (totalUnlocked / totalAchievements) * 100 : 0;
+  const totalHours = Math.round(userGames.reduce((sum, g) => sum + g.playtimeMinutes, 0) / 60);
+
+  const libraryCount = familyOverview ? familyOverview.games.length : userGames.length;
 
   const familyMostAdvanced = familyOverview
     ? [...familyOverview.games]
@@ -106,14 +92,27 @@ export default async function DashboardPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        <section className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-          <StatCard label="Jogos" value={totalGames} />
-          <StatCard label="Conquistas obtidas" value={totalUnlocked} />
-          <StatCard label="Conquistas restantes" value={totalRemaining} />
-          <StatCard label="Conclusão geral" value={`${overallPercent.toFixed(1)}%`} />
+        <section className="mb-10 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6">
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div className="flex flex-col items-center shrink-0">
+              <RadialProgress value={overallPercent} size={120} stroke={10}>
+                <div className="text-center">
+                  <p className="text-2xl font-bold leading-none">{overallPercent.toFixed(0)}%</p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Conclusão</p>
+                </div>
+              </RadialProgress>
+              <p className="text-xs text-zinc-500 mt-2">Seu progresso geral</p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-1 w-full">
+              <StatCard label="Jogos" value={totalGames} />
+              <StatCard label="Horas jogadas" value={`${totalHours.toLocaleString("pt-BR")}h`} />
+              <StatCard label="Conquistas obtidas" value={totalUnlocked} />
+              <StatCard label="Conquistas restantes" value={totalRemaining} />
+            </div>
+          </div>
         </section>
 
-        {totalGames === 0 ? (
+        {libraryCount === 0 ? (
           <div className="rounded-xl border border-dashed border-zinc-800 p-10 text-center">
             <p className="text-zinc-400">
               Nenhum jogo sincronizado ainda. Clique em &quot;Atualizar Progresso&quot; para
