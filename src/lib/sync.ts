@@ -10,7 +10,6 @@ import {
 } from "@/lib/steam-api";
 
 const GAME_CONCURRENCY = 6;
-const ACHIEVEMENT_CONCURRENCY = 8;
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -48,8 +47,14 @@ async function resolveHeaderUrl(appId: number): Promise<string> {
 
 /**
  * Fetches and persists achievement state for a game/userGame pair. Shared
- * between owned-game syncing and family-shared-game probing, since the
- * Steam endpoints and upsert logic are identical either way.
+ * between owned-game syncing and family-shared-game probing.
+ *
+ * Uses bulk reads + createMany instead of per-achievement upserts: a game
+ * with 600 achievements previously meant ~1200 round trips to Postgres,
+ * which alone could blow the serverless function timeout. This keeps it to
+ * a handful of queries per game — only *new* rows are inserted, and only
+ * changed unlock states are updated, since achievement definitions are
+ * static between syncs.
  */
 async function syncAchievements(
   steamId: string,
@@ -63,59 +68,92 @@ async function syncAchievements(
     getGlobalAchievementPercentages(appId),
   ]);
 
+  if (schema.length === 0) return { total: 0, unlocked: 0 };
+
   const percentByName = new Map(globalPercentages.map((p) => [p.name, p.percent]));
   const achievedByName = new Map(playerAchievements.map((a) => [a.apiname, a]));
 
-  const unlockedFlags = await mapWithConcurrency(schema, ACHIEVEMENT_CONCURRENCY, async (def) => {
-    const achievement = await prisma.achievement.upsert({
-      where: { gameId_apiName: { gameId, apiName: def.name } },
-      create: {
+  // 1. Ensure Achievement rows exist (insert only the missing ones).
+  const existingAchievements = await prisma.achievement.findMany({
+    where: { gameId },
+    select: { id: true, apiName: true },
+  });
+  const existingApiNames = new Set(existingAchievements.map((a) => a.apiName));
+  const missing = schema.filter((def) => !existingApiNames.has(def.name));
+
+  if (missing.length > 0) {
+    await prisma.achievement.createMany({
+      data: missing.map((def) => ({
         gameId,
         apiName: def.name,
         displayName: def.displayName,
-        description: def.description,
+        description: def.description ?? null,
         iconUrl: def.icon,
         iconGrayUrl: def.icongray,
         globalPercent: percentByName.get(def.name) ?? null,
-      },
-      update: {
-        displayName: def.displayName,
-        description: def.description,
-        iconUrl: def.icon,
-        iconGrayUrl: def.icongray,
-        globalPercent: percentByName.get(def.name) ?? null,
-      },
+      })),
+      skipDuplicates: true,
     });
+  }
+
+  const allAchievements =
+    missing.length > 0
+      ? await prisma.achievement.findMany({ where: { gameId }, select: { id: true, apiName: true } })
+      : existingAchievements;
+  const achievementIdByName = new Map(allAchievements.map((a) => [a.apiName, a.id]));
+
+  // 2. Diff the user's unlock state against what's stored.
+  const existingUserAchievements = await prisma.userAchievement.findMany({
+    where: { userGameId },
+    select: { id: true, achievementId: true, unlocked: true },
+  });
+  const uaByAchievementId = new Map(existingUserAchievements.map((ua) => [ua.achievementId, ua]));
+
+  const toCreate: { userGameId: string; achievementId: string; unlocked: boolean; unlockedAt: Date | null }[] = [];
+  const newlyUnlocked: { id: string; unlockedAt: Date | null }[] = [];
+  const newlyLocked: string[] = [];
+  let unlockedCount = 0;
+
+  for (const def of schema) {
+    const achievementId = achievementIdByName.get(def.name);
+    if (!achievementId) continue;
 
     const playerAchievement = achievedByName.get(def.name);
     const unlocked = playerAchievement?.achieved === 1;
+    if (unlocked) unlockedCount += 1;
+    const unlockedAt =
+      unlocked && playerAchievement?.unlocktime
+        ? new Date(playerAchievement.unlocktime * 1000)
+        : null;
 
-    await prisma.userAchievement.upsert({
-      where: {
-        userGameId_achievementId: { userGameId, achievementId: achievement.id },
-      },
-      create: {
-        userGameId,
-        achievementId: achievement.id,
-        unlocked,
-        unlockedAt:
-          unlocked && playerAchievement?.unlocktime
-            ? new Date(playerAchievement.unlocktime * 1000)
-            : null,
-      },
-      update: {
-        unlocked,
-        unlockedAt:
-          unlocked && playerAchievement?.unlocktime
-            ? new Date(playerAchievement.unlocktime * 1000)
-            : null,
-      },
+    const existing = uaByAchievementId.get(achievementId);
+    if (!existing) {
+      toCreate.push({ userGameId, achievementId, unlocked, unlockedAt });
+    } else if (existing.unlocked !== unlocked) {
+      if (unlocked) newlyUnlocked.push({ id: existing.id, unlockedAt });
+      else newlyLocked.push(existing.id);
+    }
+  }
+
+  if (toCreate.length > 0) {
+    await prisma.userAchievement.createMany({ data: toCreate, skipDuplicates: true });
+  }
+  // Newly unlocked rows need their own unlockedAt, so update individually -
+  // but this is only the handful that changed since the last sync.
+  for (const { id, unlockedAt } of newlyUnlocked) {
+    await prisma.userAchievement.update({
+      where: { id },
+      data: { unlocked: true, unlockedAt },
     });
+  }
+  if (newlyLocked.length > 0) {
+    await prisma.userAchievement.updateMany({
+      where: { id: { in: newlyLocked } },
+      data: { unlocked: false, unlockedAt: null },
+    });
+  }
 
-    return unlocked;
-  });
-
-  return { total: schema.length, unlocked: unlockedFlags.filter(Boolean).length };
+  return { total: schema.length, unlocked: unlockedCount };
 }
 
 async function syncOwnedGame(userId: string, steamId: string, ownedGame: SteamOwnedGame) {
@@ -207,7 +245,7 @@ async function probeFamilySharedGame(userId: string, steamId: string, appId: num
   });
 }
 
-const BATCH_SIZE = 8;
+const BATCH_SIZE = 5;
 
 /**
  * Builds the full list of appIds to sync (owned + family-shared the user
