@@ -1,9 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 type Progress = { processed: number; total: number };
+
+function formatEta(seconds: number): string {
+  if (seconds <= 0) return "quase lá...";
+  if (seconds < 60) return `~${Math.ceil(seconds)}s restantes`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return `~${minutes}m ${rest.toString().padStart(2, "0")}s restantes`;
+}
 
 /**
  * The sync endpoint can occasionally return a non-JSON body (e.g. a Vercel
@@ -27,12 +35,29 @@ export default function SyncButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const startedAtRef = useRef<number>(0);
+
+  function updateProgress(processed: number, total: number) {
+    setProgress({ processed, total });
+    // Estimate remaining time from the average rate so far. Only meaningful
+    // once at least one batch has been processed.
+    const elapsedMs = Date.now() - startedAtRef.current;
+    if (processed > 0 && processed < total && elapsedMs > 0) {
+      const msPerGame = elapsedMs / processed;
+      setEtaSeconds(((total - processed) * msPerGame) / 1000);
+    } else {
+      setEtaSeconds(null);
+    }
+  }
 
   async function handleSync() {
     setLoading(true);
     setError(null);
     setProgress(null);
+    setEtaSeconds(null);
+    startedAtRef.current = Date.now();
 
     try {
       // Kick off a fresh sync (builds the queue + processes the first batch).
@@ -43,7 +68,7 @@ export default function SyncButton() {
       });
       let { ok, data } = await parseSyncResponse(res);
       if (!ok) throw new Error((data.error as string) ?? "Falha ao sincronizar");
-      setProgress({ processed: Number(data.processed) || 0, total: Number(data.total) || 0 });
+      updateProgress(Number(data.processed) || 0, Number(data.total) || 0);
 
       // Drive the remaining batches until the queue is empty.
       let guard = 0;
@@ -51,7 +76,7 @@ export default function SyncButton() {
         res = await fetch("/api/sync", { method: "POST" });
         ({ ok, data } = await parseSyncResponse(res));
         if (!ok) throw new Error((data.error as string) ?? "Falha ao sincronizar");
-        setProgress({ processed: Number(data.processed) || 0, total: Number(data.total) || 0 });
+        updateProgress(Number(data.processed) || 0, Number(data.total) || 0);
       }
 
       router.refresh();
@@ -78,7 +103,7 @@ export default function SyncButton() {
       </button>
 
       {loading && (
-        <div className="w-48">
+        <div className="w-60">
           <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
             <div
               className={
@@ -89,11 +114,16 @@ export default function SyncButton() {
               style={percent != null ? { width: `${percent}%` } : undefined}
             />
           </div>
-          <p className="text-xs text-zinc-400 mt-1 text-right">
-            {percent != null && progress
-              ? `${progress.processed}/${progress.total} jogos (${percent.toFixed(0)}%)`
-              : "Buscando biblioteca Steam..."}
-          </p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-zinc-500">
+              {etaSeconds != null ? formatEta(etaSeconds) : ""}
+            </p>
+            <p className="text-xs text-zinc-400 text-right">
+              {percent != null && progress
+                ? `${progress.processed}/${progress.total} jogos (${percent.toFixed(0)}%)`
+                : "Buscando biblioteca Steam..."}
+            </p>
+          </div>
         </div>
       )}
 
