@@ -1,65 +1,71 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
-type SyncStatus = {
-  syncStartedAt: string | null;
-  syncTotal: number | null;
-  syncProcessed: number | null;
-  syncError: string | null;
-};
+type Progress = { processed: number; total: number };
+
+/**
+ * The sync endpoint can occasionally return a non-JSON body (e.g. a Vercel
+ * timeout/error page). Read as text first so we surface a friendly message
+ * instead of crashing on `res.json()`.
+ */
+async function parseSyncResponse(res: Response): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+  const text = await res.text();
+  try {
+    return { ok: res.ok, data: JSON.parse(text) };
+  } catch {
+    throw new Error(
+      res.status === 504 || /timeout|timed out/i.test(text)
+        ? "A sincronização demorou demais e foi interrompida. Tente novamente — o progresso é salvo aos poucos."
+        : "O servidor retornou uma resposta inesperada. Tente novamente em instantes.",
+    );
+  }
+}
 
 export default function SyncButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  function startPolling() {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch("/api/sync/status");
-        const data = await res.json();
-        setStatus(data.status);
-      } catch {
-        // ignore transient polling errors
-      }
-    }, 1500);
-  }
-
-  function stopPolling() {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }
-
-  useEffect(() => stopPolling, []);
 
   async function handleSync() {
     setLoading(true);
     setError(null);
-    setStatus(null);
-    startPolling();
+    setProgress(null);
+
     try {
-      const res = await fetch("/api/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Falha ao sincronizar");
+      // Kick off a fresh sync (builds the queue + processes the first batch).
+      let res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: true }),
+      });
+      let { ok, data } = await parseSyncResponse(res);
+      if (!ok) throw new Error((data.error as string) ?? "Falha ao sincronizar");
+      setProgress({ processed: Number(data.processed) || 0, total: Number(data.total) || 0 });
+
+      // Drive the remaining batches until the queue is empty.
+      let guard = 0;
+      while (!data.done && guard++ < 1000) {
+        res = await fetch("/api/sync", { method: "POST" });
+        ({ ok, data } = await parseSyncResponse(res));
+        if (!ok) throw new Error((data.error as string) ?? "Falha ao sincronizar");
+        setProgress({ processed: Number(data.processed) || 0, total: Number(data.total) || 0 });
+      }
+
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao sincronizar");
     } finally {
-      stopPolling();
       setLoading(false);
     }
   }
 
-  const total = status?.syncTotal ?? null;
-  const processed = status?.syncProcessed ?? null;
-  const percent = total && total > 0 ? Math.min(100, ((processed ?? 0) / total) * 100) : null;
+  const percent =
+    progress && progress.total > 0
+      ? Math.min(100, (progress.processed / progress.total) * 100)
+      : null;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -84,14 +90,14 @@ export default function SyncButton() {
             />
           </div>
           <p className="text-xs text-zinc-400 mt-1 text-right">
-            {percent != null
-              ? `${processed}/${total} jogos (${percent.toFixed(0)}%)`
+            {percent != null && progress
+              ? `${progress.processed}/${progress.total} jogos (${percent.toFixed(0)}%)`
               : "Buscando biblioteca Steam..."}
           </p>
         </div>
       )}
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-red-400 max-w-48 text-right">{error}</p>}
     </div>
   );
 }

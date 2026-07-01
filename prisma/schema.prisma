@@ -27,6 +27,7 @@ model User {
   syncTotal     Int?
   syncProcessed Int?
   syncError     String?
+  syncQueue     Int[]    @default([])
 
   games       UserGame[]
   favorites   FavoriteGame[]

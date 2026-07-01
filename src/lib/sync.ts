@@ -46,16 +46,6 @@ async function resolveHeaderUrl(appId: number): Promise<string> {
   return realUrl ?? `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`;
 }
 
-async function withProgress(onDone: () => Promise<void>, fn: () => Promise<void>, label: string) {
-  try {
-    await fn();
-  } catch (error) {
-    console.error(`Failed to sync ${label}`, error);
-  } finally {
-    await onDone();
-  }
-}
-
 /**
  * Fetches and persists achievement state for a game/userGame pair. Shared
  * between owned-game syncing and family-shared-game probing, since the
@@ -217,55 +207,103 @@ async function probeFamilySharedGame(userId: string, steamId: string, appId: num
   });
 }
 
-export async function syncUserLibrary(userId: string, steamId: string) {
+const BATCH_SIZE = 8;
+
+/**
+ * Builds the full list of appIds to sync (owned + family-shared the user
+ * doesn't own directly) and stores it as a queue on the user. Syncing then
+ * happens in small re-entrant batches (processSyncBatch), so no single
+ * request has to finish the whole library within the serverless timeout.
+ */
+export async function startSync(userId: string, steamId: string): Promise<{ total: number }> {
+  const ownedGames = await getOwnedGames(steamId);
+  const ownedAppIds = new Set(ownedGames.map((g) => g.appid));
+
+  const familyGroup = await getUserFamilyGroup(userId);
+  const sharedCandidates = familyGroup
+    ? await prisma.userGame.findMany({
+        where: {
+          user: { familyMemberships: { some: { familyGroupId: familyGroup.id } } },
+          userId: { not: userId },
+        },
+        include: { game: true },
+        distinct: ["gameId"],
+      })
+    : [];
+  const sharedAppIds = sharedCandidates
+    .map((ug) => ug.game.appId)
+    .filter((appId) => !ownedAppIds.has(appId));
+
+  const queue = [...ownedGames.map((g) => g.appid), ...sharedAppIds];
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      syncQueue: queue,
+      syncTotal: queue.length,
+      syncProcessed: 0,
+      syncStartedAt: new Date(),
+      syncError: null,
+    },
+  });
+
+  return { total: queue.length };
+}
+
+/**
+ * Processes the next chunk of the user's sync queue. Returns progress so the
+ * client can loop until `done`. Each call is bounded by BATCH_SIZE games,
+ * keeping it comfortably under the serverless function timeout even for
+ * huge libraries.
+ */
+export async function processSyncBatch(
+  userId: string,
+  steamId: string,
+): Promise<{ done: boolean; processed: number; total: number }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { syncQueue: true, syncTotal: true },
+  });
+  if (!user) throw new Error("User not found");
+
+  const queue = user.syncQueue ?? [];
+  const total = user.syncTotal ?? queue.length;
+
+  if (queue.length === 0) {
+    return { done: true, processed: total, total };
+  }
+
+  const batch = queue.slice(0, BATCH_SIZE);
+  const rest = queue.slice(BATCH_SIZE);
+
   try {
     const ownedGames = await getOwnedGames(steamId);
-    const ownedAppIds = new Set(ownedGames.map((g) => g.appid));
+    const ownedByAppId = new Map(ownedGames.map((g) => [g.appid, g]));
 
-    const familyGroup = await getUserFamilyGroup(userId);
-    const sharedCandidates = familyGroup
-      ? await prisma.userGame.findMany({
-          where: {
-            user: { familyMemberships: { some: { familyGroupId: familyGroup.id } } },
-            userId: { not: userId },
-          },
-          include: { game: true },
-          distinct: ["gameId"],
-        })
-      : [];
-    const unownedSharedGames = sharedCandidates.filter((ug) => !ownedAppIds.has(ug.game.appId));
-
-    const total = ownedGames.length + unownedSharedGames.length;
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { syncStartedAt: new Date(), syncTotal: total, syncProcessed: 0, syncError: null },
+    await mapWithConcurrency(batch, GAME_CONCURRENCY, async (appId) => {
+      try {
+        const owned = ownedByAppId.get(appId);
+        if (owned) {
+          await syncOwnedGame(userId, steamId, owned);
+        } else {
+          const game = await prisma.game.findUnique({
+            where: { appId },
+            select: { name: true },
+          });
+          await probeFamilySharedGame(userId, steamId, appId, game?.name ?? `App ${appId}`);
+        }
+      } catch (error) {
+        console.error(`Failed to sync app ${appId}`, error);
+      }
     });
 
-    const incrementProcessed = async () => {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { syncProcessed: { increment: 1 } },
-      });
-    };
+    const processed = total - rest.length;
+    await prisma.user.update({
+      where: { id: userId },
+      data: { syncQueue: rest, syncProcessed: processed },
+    });
 
-    await mapWithConcurrency(ownedGames, GAME_CONCURRENCY, (ownedGame) =>
-      withProgress(
-        incrementProcessed,
-        () => syncOwnedGame(userId, steamId, ownedGame),
-        `${ownedGame.appid} (${ownedGame.name})`,
-      ),
-    );
-
-    await mapWithConcurrency(unownedSharedGames, GAME_CONCURRENCY, (ug) =>
-      withProgress(
-        incrementProcessed,
-        () => probeFamilySharedGame(userId, steamId, ug.game.appId, ug.game.name),
-        `${ug.game.appId} (${ug.game.name}, shared)`,
-      ),
-    );
-
-    return { gamesSynced: ownedGames.length, sharedGamesProbed: unownedSharedGames.length };
+    return { done: rest.length === 0, processed, total };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Sync failed";
     await prisma.user.update({ where: { id: userId }, data: { syncError: message } });

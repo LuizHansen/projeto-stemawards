@@ -1,22 +1,35 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { syncUserLibrary } from "@/lib/sync";
+import { startSync, processSyncBatch } from "@/lib/sync";
 
-// Large libraries (100+ games) take longer than the default function
-// timeout to sync - use the highest duration the Vercel plan allows.
-export const maxDuration = 300;
+// Each request only syncs one small batch, so it stays well under the
+// serverless timeout (60s on Vercel Hobby). The client calls repeatedly
+// until the sync reports done.
+export const maxDuration = 60;
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  let start = false;
   try {
-    const result = await syncUserLibrary(session.userId, session.steamId);
-    return NextResponse.json({ success: true, ...result });
+    const body = await request.json();
+    start = body?.start === true;
+  } catch {
+    start = false;
+  }
+
+  try {
+    if (start) {
+      await startSync(session.userId, session.steamId);
+    }
+    const result = await processSyncBatch(session.userId, session.steamId);
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Sync failed", error);
-    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Sync failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
