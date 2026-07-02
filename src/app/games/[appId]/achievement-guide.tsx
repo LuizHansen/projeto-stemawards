@@ -35,14 +35,29 @@ export default function AchievementGuide({ achievementId }: { achievementId: str
     <div className="mt-2">
       <button
         onClick={toggle}
-        className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+        className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
       >
-        {open ? "Ocultar guia" : "Ver guia"}
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          className={`transition-transform ${open ? "rotate-90" : ""}`}
+          aria-hidden
+        >
+          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        {open ? "Ocultar guia" : "Ver guia de conquista"}
       </button>
 
       {open && (
-        <div className="mt-2 rounded-md bg-zinc-950 border border-zinc-800 p-3 text-sm">
-          {loading && <p className="text-zinc-400">Gerando guia com IA...</p>}
+        <div className="mt-2 rounded-lg bg-black/30 border border-white/10 p-3.5 text-sm">
+          {loading && (
+            <p className="text-zinc-400 flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full border-2 border-emerald-400/40 border-t-emerald-400 animate-spin" />
+              Gerando guia com IA...
+            </p>
+          )}
           {error && <p className="text-red-400">Não foi possível carregar o guia.</p>}
           {guide && <AchievementGuideContent guide={guide} />}
         </div>

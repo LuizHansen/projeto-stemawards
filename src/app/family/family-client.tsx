@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import GameImage from "@/components/game-image";
+import Button from "@/components/ui/button";
+import Badge from "@/components/ui/badge";
 import FamilyComparison, { type MemberStats } from "./family-comparison";
+
+const inputClasses =
+  "w-full rounded-lg bg-white/[0.03] border border-white/10 focus:border-emerald-500/40 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 px-3.5 py-2.5 text-sm placeholder:text-zinc-600 transition-colors";
 
 type Owner = {
   userId: string;
@@ -105,85 +110,89 @@ export default function FamilyClient({ currentUserId }: { currentUserId: string 
 
   if (!overview) {
     return (
-      <div className="max-w-md space-y-8">
-        <form onSubmit={createGroup} className="space-y-3">
-          <h2 className="text-lg font-semibold">Criar grupo familiar</h2>
+      <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+        <form
+          onSubmit={createGroup}
+          className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3"
+        >
+          <h2 className="font-display font-semibold">Criar grupo familiar</h2>
+          <p className="text-xs text-zinc-500 -mt-1">Você recebe um código para convidar os outros.</p>
           <input
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
             placeholder="Nome do grupo (ex: Família Hansen)"
-            className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm"
+            className={inputClasses}
             required
           />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2"
-          >
+          <Button type="submit" variant="primary" disabled={submitting}>
             Criar grupo
-          </button>
+          </Button>
         </form>
 
-        <form onSubmit={joinGroup} className="space-y-3">
-          <h2 className="text-lg font-semibold">Entrar em um grupo existente</h2>
+        <form
+          onSubmit={joinGroup}
+          className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3"
+        >
+          <h2 className="font-display font-semibold">Entrar em um grupo</h2>
+          <p className="text-xs text-zinc-500 -mt-1">Use o código que alguém da família compartilhou.</p>
           <input
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
             placeholder="Código de convite"
-            className="w-full rounded-md bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm"
+            className={`${inputClasses} font-mono tracking-wider`}
             required
           />
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2"
-          >
+          <Button type="submit" variant="secondary" disabled={submitting}>
             Entrar
-          </button>
+          </Button>
         </form>
 
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className="text-red-400 text-sm sm:col-span-2">{error}</p>}
       </div>
     );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-4 mb-8 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
         <div>
-          <h2 className="text-lg font-semibold">{overview.familyGroup.name}</h2>
-          <p className="text-sm text-zinc-400">
-            Código de convite: <span className="font-mono text-zinc-200">{overview.familyGroup.inviteCode}</span>
+          <h2 className="font-display text-lg font-semibold">{overview.familyGroup.name}</h2>
+          <p className="text-sm text-zinc-400 mt-0.5 flex items-center gap-1.5">
+            Código de convite:
+            <span className="font-mono tracking-wider text-zinc-100 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">
+              {overview.familyGroup.inviteCode}
+            </span>
           </p>
         </div>
-        <button
-          onClick={leaveGroup}
-          disabled={submitting}
-          className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50"
-        >
+        <Button onClick={leaveGroup} variant="danger" size="sm" disabled={submitting}>
           Sair do grupo
-        </button>
+        </Button>
       </div>
 
-      <h2 id="comparacao" className="text-lg font-semibold mb-4 scroll-mt-8">
+      <h2 id="comparacao" className="font-display text-lg font-semibold mb-4 scroll-mt-20">
         Comparação entre membros
       </h2>
       <div className="mb-10">
         <FamilyComparison members={overview.memberStats} currentUserId={currentUserId} />
       </div>
 
-      <h2 className="text-lg font-semibold mb-4">
-        Biblioteca combinada ({overview.games.length} jogos)
-      </h2>
-      <div className="grid gap-3">
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="font-display text-lg font-semibold">Biblioteca combinada</h2>
+        <Badge tone="neutral">{overview.games.length}</Badge>
+      </div>
+      <div className="grid gap-2.5">
         {overview.games.map((game) => {
           const ownedByMe = game.owners.some((o) => o.userId === currentUserId);
           const content = (
             <>
-              <GameImage appId={game.appId} name={game.name} className="w-28 h-14 object-cover rounded shrink-0" />
-              <div className="flex-1">
-                <p className="font-medium">{game.name}</p>
-                <div className="flex gap-2 mt-1 flex-wrap">
+              <GameImage
+                appId={game.appId}
+                name={game.name}
+                className="w-28 h-14 object-cover rounded-lg ring-1 ring-white/10 shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{game.name}</p>
+                <div className="flex gap-1.5 mt-1.5 flex-wrap">
                   {game.owners.map((owner) => {
                     const percent =
                       owner.achievementsTotal > 0
@@ -192,10 +201,10 @@ export default function FamilyClient({ currentUserId }: { currentUserId: string 
                     return (
                       <span
                         key={owner.userId}
-                        className={`text-xs rounded-full px-2 py-0.5 ${
+                        className={`text-xs rounded-full px-2 py-0.5 border ${
                           owner.userId === currentUserId
-                            ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800"
-                            : "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                            ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/25"
+                            : "bg-white/5 text-zinc-300 border-white/10"
                         }`}
                       >
                         {owner.username}: {percent.toFixed(0)}%
@@ -211,7 +220,7 @@ export default function FamilyClient({ currentUserId }: { currentUserId: string 
             return (
               <div
                 key={game.gameId}
-                className="flex items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-3 opacity-80"
+                className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-3 opacity-70"
               >
                 {content}
               </div>
@@ -222,7 +231,7 @@ export default function FamilyClient({ currentUserId }: { currentUserId: string 
             <Link
               key={game.gameId}
               href={`/games/${game.appId}`}
-              className="flex items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-600 p-3"
+              className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/20 p-3 transition-colors"
             >
               {content}
             </Link>

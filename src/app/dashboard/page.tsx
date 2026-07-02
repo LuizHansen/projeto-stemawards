@@ -1,10 +1,11 @@
 import Link from "next/link";
-import Image from "next/image";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFamilyOverview } from "@/lib/family";
 import GameImage from "@/components/game-image";
 import RadialProgress from "@/components/charts/radial-progress";
+import TopNav from "@/components/top-nav";
+import Badge from "@/components/ui/badge";
 import SyncButton from "./sync-button";
 
 export default async function DashboardPage() {
@@ -53,75 +54,46 @@ export default async function DashboardPage() {
     .slice(0, 5);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="sticky top-0 z-10 backdrop-blur-md bg-zinc-950/80 border-b border-zinc-800">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            {user.avatarUrl && (
-              <Image
-                src={user.avatarUrl}
-                alt={user.username}
-                width={44}
-                height={44}
-                className="rounded-full"
-              />
-            )}
-            <div>
-              <h1 className="text-base font-semibold leading-tight">{user.username}</h1>
-              <p className="text-xs text-zinc-500">SteamID: {user.steamId}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {familyOverview && (
-              <Link
-                href="/family#comparacao"
-                className="rounded-full border border-zinc-700 hover:border-zinc-500 text-zinc-200 text-sm font-medium px-4 py-2 transition-colors"
-              >
-                Comparar KPIs
-              </Link>
-            )}
-            <Link href="/family" className="text-sm text-zinc-400 hover:text-zinc-200">
-              Família
-            </Link>
-            <SyncButton />
-            <form action="/api/auth/logout" method="post">
-              <button className="text-sm text-zinc-400 hover:text-zinc-200">Sair</button>
-            </form>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen text-zinc-100">
+      <TopNav user={user} active="biblioteca" actions={<SyncButton />} />
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        <section className="mb-10 rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6">
-          <div className="flex flex-col sm:flex-row items-center gap-6">
+        <section className="mb-12 rounded-2xl border border-white/10 bg-white/[0.02] p-6 sm:p-7">
+          <div className="flex flex-col sm:flex-row items-center gap-7">
             <div className="flex flex-col items-center shrink-0">
-              <RadialProgress value={overallPercent} size={120} stroke={10}>
+              <RadialProgress value={overallPercent} size={124} stroke={9}>
                 <div className="text-center">
-                  <p className="text-2xl font-bold leading-none">{overallPercent.toFixed(0)}%</p>
-                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">Conclusão</p>
+                  <p className="tnum text-2xl font-bold leading-none">
+                    {overallPercent.toFixed(0)}
+                    <span className="text-base text-zinc-500">%</span>
+                  </p>
+                  <p className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] mt-1">
+                    Conclusão
+                  </p>
                 </div>
               </RadialProgress>
-              <p className="text-xs text-zinc-500 mt-2">Seu progresso geral</p>
+              <p className="text-xs text-zinc-500 mt-3">Seu progresso geral</p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-1 w-full">
-              <StatCard label="Jogos" value={totalGames} />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 w-full">
+              <StatCard label="Jogos" value={totalGames.toLocaleString("pt-BR")} />
               <StatCard label="Horas jogadas" value={`${totalHours.toLocaleString("pt-BR")}h`} />
-              <StatCard label="Conquistas obtidas" value={totalUnlocked} />
-              <StatCard label="Conquistas restantes" value={totalRemaining} />
+              <StatCard label="Conquistas" value={totalUnlocked.toLocaleString("pt-BR")} />
+              <StatCard label="Faltam" value={totalRemaining.toLocaleString("pt-BR")} />
             </div>
           </div>
         </section>
 
         {libraryCount === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-800 p-10 text-center">
+          <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center">
             <p className="text-zinc-400">
-              Nenhum jogo sincronizado ainda. Clique em &quot;Atualizar Progresso&quot; para
-              importar sua biblioteca Steam.
+              Nenhum jogo sincronizado ainda. Clique em{" "}
+              <span className="text-emerald-400 font-medium">Atualizar Progresso</span> para importar
+              sua biblioteca Steam.
             </p>
           </div>
         ) : (
           <>
-            <h2 className="text-lg font-semibold mb-4">Jogos mais avançados</h2>
+            <SectionHeader title="Jogos mais avançados" />
             <div className="grid [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] gap-x-4 gap-y-10 mb-14">
               {familyOverview
                 ? familyMostAdvanced.map((game) => (
@@ -130,11 +102,10 @@ export default async function DashboardPage() {
                 : personalMostAdvanced.map((ug) => <GameCard key={ug.id} userGame={ug} />)}
             </div>
 
-            <h2 className="text-lg font-semibold mb-4">
-              {familyOverview
-                ? `Biblioteca da família (${familyOverview.games.length})`
-                : "Biblioteca"}
-            </h2>
+            <SectionHeader
+              title={familyOverview ? "Biblioteca da família" : "Biblioteca"}
+              count={libraryCount}
+            />
             <div className="grid [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))] gap-x-4 gap-y-10">
               {familyOverview
                 ? familyOverview.games.map((game) => (
@@ -149,11 +120,20 @@ export default async function DashboardPage() {
   );
 }
 
+function SectionHeader({ title, count }: { title: string; count?: number }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <h2 className="font-display text-lg font-semibold tracking-tight">{title}</h2>
+      {count != null && <Badge tone="neutral">{count.toLocaleString("pt-BR")}</Badge>}
+    </div>
+  );
+}
+
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg bg-zinc-900 border border-zinc-800 p-4">
-      <p className="text-sm text-zinc-400">{label}</p>
-      <p className="text-2xl font-bold">{value}</p>
+    <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3">
+      <p className="text-[11px] text-zinc-500 uppercase tracking-wider">{label}</p>
+      <p className="tnum text-2xl font-bold mt-0.5">{value}</p>
     </div>
   );
 }

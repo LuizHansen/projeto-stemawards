@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AchievementModal from "@/components/achievement-modal";
+import { buttonClasses } from "@/components/ui/button";
 
 type Stage = {
   title: string;
@@ -51,27 +52,30 @@ export default function RoadmapView({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div className="bg-blue-900 text-white text-xs font-bold uppercase tracking-wide px-4 py-2 rounded-t-md">
-          Roadmap
-        </div>
+        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-semibold uppercase tracking-wider px-3 py-1">
+          ✦ Roadmap
+        </span>
         <button
           onClick={() => load(true)}
           disabled={loading}
-          className="text-xs text-zinc-400 hover:text-zinc-200 disabled:opacity-50"
+          className={buttonClasses("ghost", "sm")}
         >
           {loading ? "Gerando..." : "Regerar roadmap"}
         </button>
       </div>
 
       {loading && !stages && (
-        <p className="text-zinc-400">
-          Gerando roadmap com IA a partir das conquistas do jogo, isso pode levar alguns
-          segundos...
-        </p>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+          <span className="inline-block h-5 w-5 rounded-full border-2 border-emerald-400/40 border-t-emerald-400 animate-spin mb-3" />
+          <p className="text-zinc-400 text-sm">
+            Gerando roadmap com IA a partir das conquistas do jogo, isso pode levar alguns
+            segundos...
+          </p>
+        </div>
       )}
 
       {error && (
-        <p className="text-red-400">
+        <p className="text-red-400 text-sm">
           {error}
           {error.includes("GEMINI_API_KEY") &&
             " — configure a chave do Google Gemini no .env do servidor."}
@@ -79,39 +83,44 @@ export default function RoadmapView({
       )}
 
       {stages && (
-        <div className="divide-y divide-zinc-800 border border-zinc-800 rounded-b-md overflow-hidden">
+        <ol className="relative border-l border-white/10 ml-3 space-y-6">
           {stages.map((stage, i) => (
-            <div key={i} className="bg-zinc-900 p-5">
-              <h3 className="text-lg font-semibold mb-2">{stage.title}</h3>
-              <p className="text-zinc-300 leading-relaxed mb-3">{stage.body}</p>
-              {stage.achievementIds.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {stage.achievementIds.map((id) => {
-                    const achievement = achievementsById[id];
-                    if (!achievement) return null;
-                    return (
-                      <button
-                        key={id}
-                        onClick={() => setSelectedAchievementId(id)}
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs hover:brightness-125 transition cursor-pointer ${
-                          achievement.unlocked
-                            ? "border-emerald-800 bg-emerald-950/40 text-emerald-300"
-                            : "border-zinc-700 bg-zinc-800 text-zinc-300"
-                        }`}
-                      >
-                        {achievement.iconUrl && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={achievement.iconUrl} alt="" className="w-4 h-4 rounded-sm" />
-                        )}
-                        {achievement.displayName}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <li key={i} className="relative pl-6">
+              <span className="absolute -left-[9px] top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-emerald-950 tnum">
+                {i + 1}
+              </span>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                <h3 className="font-display text-base font-semibold mb-2">{stage.title}</h3>
+                <p className="text-zinc-300 text-sm leading-relaxed mb-3">{stage.body}</p>
+                {stage.achievementIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {stage.achievementIds.map((id) => {
+                      const achievement = achievementsById[id];
+                      if (!achievement) return null;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setSelectedAchievementId(id)}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs transition-colors cursor-pointer ${
+                            achievement.unlocked
+                              ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+                              : "border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10"
+                          }`}
+                        >
+                          {achievement.iconUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={achievement.iconUrl} alt="" className="w-4 h-4 rounded-sm" />
+                          )}
+                          {achievement.displayName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
 
       {selectedAchievementId &&
